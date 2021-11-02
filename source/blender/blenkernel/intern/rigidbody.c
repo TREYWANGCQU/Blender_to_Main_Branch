@@ -671,7 +671,7 @@ static void rigidbody_validate_sim_object(RigidBodyWorld *rbw, Object *ob, bool 
 		RB_body_set_friction(rbo->physics_object, rbo->friction);
 		RB_body_set_restitution(rbo->physics_object, rbo->restitution);
 
-		RB_body_set_damping(rbo->physics_object, rbo->lin_damping, rbo->ang_damping);
+		RB_body_set_damping(rbo->physics_object, pow(1 - rbo->lin_damping, rbw->length_scale), pow(1 - rbo->ang_damping, rbw->length_scale));// pow(1 - rbo->lin_damping, scale_length),modify
 		RB_body_set_sleep_thresh(rbo->physics_object, rbo->lin_sleep_thresh, rbo->ang_sleep_thresh);
 		RB_body_set_activation_state(rbo->physics_object, rbo->flag & RBO_FLAG_USE_DEACTIVATION);
 
@@ -690,6 +690,13 @@ static void rigidbody_validate_sim_object(RigidBodyWorld *rbw, Object *ob, bool 
 
 		RB_body_set_mass(rbo->physics_object, RBO_GET_MASS(rbo));
 		RB_body_set_kinematic_state(rbo->physics_object, rbo->flag & RBO_FLAG_KINEMATIC || rbo->flag & RBO_FLAG_DISABLED);
+
+
+		
+
+		
+
+
 	}
 
 	if (rbw && rbw->physics_world)
@@ -896,10 +903,38 @@ void BKE_rigidbody_validate_sim_world(Scene *scene, RigidBodyWorld *rbw, bool re
 	if (rebuild || rbw->physics_world == NULL) {
 		if (rbw->physics_world)
 			RB_dworld_delete(rbw->physics_world);
-		rbw->physics_world = RB_dworld_new(scene->physics_settings.gravity);
+		
+		bool is_periodic[3] = { false };
+		float mi_periodic[3] = { 0 };
+		float mx_periodic[3] = { 0 };
+		if (rbw->flag & RBW_FLAG_USE_PERIODIC_X)
+		{
+			is_periodic[0] = true;
+			mi_periodic[0] = rbw->lower_periodic_x;
+			mx_periodic[0] = rbw->upper_periodic_x;
+		}
+		if (rbw->flag & RBW_FLAG_USE_PERIODIC_Y)
+		{
+			is_periodic[1] = true;
+			mi_periodic[1] = rbw->lower_periodic_y;
+			mx_periodic[1] = rbw->upper_periodic_y;
+		}
+		if (rbw->flag & RBW_FLAG_USE_PERIODIC_Z)
+		{
+			is_periodic[2] = true;
+			mi_periodic[2] = rbw->lower_periodic_z;
+			mx_periodic[2] = rbw->upper_periodic_z;
+		}
+
+		rbw->length_scale = scene->unit.scale_length;
+		rbw->physics_world = RB_dworld_new(scene->physics_settings.gravity,mi_periodic,mx_periodic);
+		RB_world_set_enable_periodic_boundary(rbw->physics_world, is_periodic);
+		RB_world_set_periodic_boundary(rbw->physics_world, mi_periodic, mx_periodic);
 	}
+	
 
 	RB_dworld_set_solver_iterations(rbw->physics_world, rbw->num_solver_iterations);
+	RB_dworld_set_solver_parameters(rbw->physics_world, rbw->erp, rbw->cfm, rbw->lsr);
 	RB_dworld_set_split_impulse(rbw->physics_world, rbw->flag & RBW_FLAG_USE_SPLIT_IMPULSE);
 }
 
@@ -929,9 +964,11 @@ RigidBodyWorld *BKE_rigidbody_create_world(Scene *scene)
 
 	rbw->time_scale = 1.0f;
 
-	rbw->steps_per_second = 60; /* Bullet default (60 Hz) */
-	rbw->num_solver_iterations = 10; /* 10 is bullet default */
-
+	rbw->steps_per_frame = 20; 
+	rbw->num_solver_iterations = 100; /* 10 is bullet default */
+	rbw->erp = 0.2; /* 0.2 is  default */
+	rbw->cfm = 0.0; /* 0.0 is  default */
+	rbw->lsr = 1.0e-5; /* 1.0e-5 is  default */
 	rbw->pointcache = BKE_ptcache_add(&(rbw->ptcaches));
 	rbw->pointcache->step = 1;
 
@@ -1002,16 +1039,16 @@ RigidBodyOb *BKE_rigidbody_create_object(Scene *scene, Object *ob, short type)
 
 	rbo->mass = 1.0f;
 
-	rbo->friction = 0.5f; /* best when non-zero. 0.5 is Bullet default */
-	rbo->restitution = 0.0f; /* best when zero. 0.0 is Bullet default */
+	rbo->friction = 0.5f; 
+	rbo->restitution = 0.0f; 
 
 	rbo->margin = 0.04f; /* 0.04 (in meters) is Bullet default */
 
 	rbo->lin_sleep_thresh = 0.4f; /* 0.4 is half of Bullet default */
 	rbo->ang_sleep_thresh = 0.5f; /* 0.5 is half of Bullet default */
 
-	rbo->lin_damping = 0.04f; /* 0.04 is game engine default */
-	rbo->ang_damping = 0.1f; /* 0.1 is game engine default */
+	rbo->lin_damping = 0.05f; 
+	rbo->ang_damping = 0.1f; 
 
 	rbo->col_groups = 1;
 
@@ -1216,7 +1253,7 @@ static void rigidbody_update_sim_world(Scene *scene, RigidBodyWorld *rbw)
 
 	/* update gravity, since this RNA setting is not part of RigidBody settings */
 	RB_dworld_set_gravity(rbw->physics_world, adj_gravity);
-
+	rbw->length_scale = scene->unit.scale_length;
 	/* update object array in case there are changes */
 	rigidbody_update_ob_array(rbw);
 }
@@ -1284,7 +1321,7 @@ static void rigidbody_update_sim_ob(Scene *scene, RigidBodyWorld *rbw, Object *o
 			/* calculate net force of effectors, and apply to sim object
 			 *	- we use 'central force' since apply force requires a "relative position" which we don't have...
 			 */
-			pdDoEffectors(effectors, NULL, effector_weights, &epoint, eff_force, NULL);
+			pdDoEffectors(effectors, NULL, effector_weights, &epoint, eff_force, NULL,ob);
 			if (G.f & G_DEBUG)
 				printf("\tapplying force (%f,%f,%f) to '%s'\n", eff_force[0], eff_force[1], eff_force[2], ob->id.name + 2);
 			/* activate object in case it is deactivated */
@@ -1629,17 +1666,18 @@ void BKE_rigidbody_do_simulation(Scene *scene, float ctime)
 		/* update and validate simulation */
 		rigidbody_update_simulation(scene, rbw, false);
 
-		/* calculate how much time elapsed since last step in seconds */
-		timestep = 1.0f / (float)FPS * (ctime - rbw->ltime) * rbw->time_scale;
-		/* step simulation by the requested timestep, steps per second are adjusted to take time scale into account */
-		RB_dworld_step_simulation(rbw->physics_world, timestep, INT_MAX, 1.0f / (float)rbw->steps_per_second * min_ff(rbw->time_scale, 1.0f));
+		/* calculate how much time elapsed since last step in seconds *scene->unit.scale_length */
+		timestep = 1.0f / (float)FPS * (ctime - rbw->ltime) * rbw->time_scale*1.0f / scene->unit.scale_length;
+
+		/* step simulation by the requested timestep */
+		RB_dworld_step_simulation(rbw->physics_world, timestep, INT_MAX, rbw->steps_per_frame);
 
 		rigidbody_update_simulation_post_step(rbw);
 
 		/* write cache for current frame */
 		BKE_ptcache_validate(cache, (int)ctime);
 		BKE_ptcache_write(&pid, (unsigned int)ctime);
-
+		RB_dworld_clearforce(rbw->physics_world);
 		rbw->ltime = ctime;
 	}
 }

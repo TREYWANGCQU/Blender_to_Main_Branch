@@ -16,6 +16,7 @@ subject to the following restrictions:
 #ifndef BT_DISPATCHER_H
 #define BT_DISPATCHER_H
 #include "LinearMath/btScalar.h"
+#include "LinearMath/btVector3.h"
 
 class btCollisionAlgorithm;
 struct btBroadphaseProxy;
@@ -46,7 +47,10 @@ struct btDispatcherInfo
 		m_useEpa(true),
 		m_allowedCcdPenetration(btScalar(0.04)),
 		m_useConvexConservativeDistanceUtil(false),
-		m_convexConservativeDistanceThreshold(0.0f)
+		m_convexConservativeDistanceThreshold(0.0f),
+		m_mi_periodic(btScalar(0.0), btScalar(0.0), btScalar(0.0)),
+		m_mx_periodic(btScalar(0.0), btScalar(0.0), btScalar(0.0))
+		
 	{
 
 	}
@@ -62,6 +66,9 @@ struct btDispatcherInfo
 	btScalar	m_allowedCcdPenetration;
 	bool		m_useConvexConservativeDistanceUtil;
 	btScalar	m_convexConservativeDistanceThreshold;
+	btVector3   m_mi_periodic;
+	btVector3   m_mx_periodic;
+	
 };
 
 ///The btDispatcher interface class can be used in combination with broadphase to dispatch calculations for overlapping pairs.

@@ -138,6 +138,8 @@ btDbvtBroadphase::btDbvtBroadphase(btOverlappingPairCache* paircache)
 	m_gid				=	0;
 	m_pid				=	0;
 	m_cid				=	0;
+	
+
 	for(int i=0;i<=STAGECOUNT;++i)
 	{
 		m_stageRoots[i]=0;
@@ -177,6 +179,8 @@ btBroadphaseProxy*				btDbvtBroadphase::createProxy(	const btVector3& aabbMin,
 	proxy->stage		=	m_stageCurrent;
 	proxy->m_uniqueId	=	++m_gid;
 	proxy->leaf			=	m_sets[0].insert(aabb,proxy);
+
+	
 	listappend(proxy,m_stageRoots[m_stageCurrent]);
 	if(!m_deferedcollide)
 	{
@@ -189,6 +193,13 @@ btBroadphaseProxy*				btDbvtBroadphase::createProxy(	const btVector3& aabbMin,
 }
 
 //
+void							btDbvtBroadphase::setPeriodic( btVector3 box_size)
+{
+	m_sets[0].set_box_Periodic(box_size);
+	m_sets[1].set_box_Periodic(box_size);
+
+}
+
 void							btDbvtBroadphase::destroyProxy(	btBroadphaseProxy* absproxy,
 															   btDispatcher* dispatcher)
 {
@@ -386,6 +397,10 @@ void							btDbvtBroadphase::setAabbForceUpdate(		btBroadphaseProxy* absproxy,
 	}	
 }
 
+
+
+
+
 //
 void							btDbvtBroadphase::calculateOverlappingPairs(btDispatcher* dispatcher)
 {
@@ -568,7 +583,8 @@ void							btDbvtBroadphase::collide(btDispatcher* dispatcher)
 				btBroadphasePair&	p=pairs[(m_cid+i)%pairs.size()];
 				btDbvtProxy*		pa=(btDbvtProxy*)p.m_pProxy0;
 				btDbvtProxy*		pb=(btDbvtProxy*)p.m_pProxy1;
-				if(!Intersect(pa->leaf->volume,pb->leaf->volume))
+				
+				if (!Intersect(pa->leaf->volume, pb->leaf->volume, m_sets[0].m_box_Periodic))
 				{
 #if DBVT_BP_SORTPAIRS
 					if(pa->m_uniqueId>pb->m_uniqueId) 
@@ -604,6 +620,9 @@ btOverlappingPairCache*			btDbvtBroadphase::getOverlappingPairCache()
 {
 	return(m_paircache);
 }
+
+
+
 
 //
 const btOverlappingPairCache*	btDbvtBroadphase::getOverlappingPairCache() const

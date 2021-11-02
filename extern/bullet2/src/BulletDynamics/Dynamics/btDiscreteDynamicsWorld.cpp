@@ -362,11 +362,25 @@ void	btDiscreteDynamicsWorld::synchronizeSingleMotionState(btRigidBody* body)
 		//if (body->getActivationState() != ISLAND_SLEEPING)
 		{
 			btTransform interpolatedTransform;
+			btVector3 interpolatedPosition;
+			
+			
+			interpolatedTransform = body->getWorldTransform();
+			interpolatedPosition = interpolatedTransform.getOrigin();
+
+			
+			//interpolatedTransform.setOrigin(interpolatedPosition);
+			//body->setWorldTransform(interpolatedTransform);
+
 			btTransformUtil::integrateTransform(body->getInterpolationWorldTransform(),
-				body->getInterpolationLinearVelocity(),body->getInterpolationAngularVelocity(),
+				body->getInterpolationLinearVelocity(), body->getInterpolationAngularVelocity(),
 				(m_latencyMotionStateInterpolation && m_fixedTimeStep) ? m_localTime - m_fixedTimeStep : m_localTime*body->getHitFraction(),
 				interpolatedTransform);
+
 			body->getMotionState()->setWorldTransform(interpolatedTransform);
+
+
+
 		}
 	}
 }
@@ -382,8 +396,8 @@ void	btDiscreteDynamicsWorld::synchronizeMotionStates()
 		{
 			btCollisionObject* colObj = m_collisionObjects[i];
 			btRigidBody* body = btRigidBody::upcast(colObj);
-			if (body)
-				synchronizeSingleMotionState(body);
+			/*if (body)
+				synchronizeSingleMotionState(body);*/
 		}
 	} else
 	{
@@ -392,46 +406,53 @@ void	btDiscreteDynamicsWorld::synchronizeMotionStates()
 		{
 			btRigidBody* body = m_nonStaticRigidBodies[i];
 			if (body->isActive())
+			{
 				synchronizeSingleMotionState(body);
+				
+
+			}
+
+
 		}
 	}
 }
 
 
-int	btDiscreteDynamicsWorld::stepSimulation( btScalar timeStep,int maxSubSteps, btScalar fixedTimeStep)
+int	btDiscreteDynamicsWorld::stepSimulation( btScalar timeStep,int maxSubSteps, int SubSteps)
 {
 	startProfiling(timeStep);
 
 	BT_PROFILE("stepSimulation");
 
-	int numSimulationSubSteps = 0;
-
-	if (maxSubSteps)
-	{
-		//fixed timestep with interpolation
-		m_fixedTimeStep = fixedTimeStep;
-		m_localTime += timeStep;
-		if (m_localTime >= fixedTimeStep)
-		{
-			numSimulationSubSteps = int( m_localTime / fixedTimeStep);
-			m_localTime -= numSimulationSubSteps * fixedTimeStep;
-		}
-	} else
-	{
-		//variable timestep
-		fixedTimeStep = timeStep;
-		m_localTime = m_latencyMotionStateInterpolation ? 0 : timeStep;
-		m_fixedTimeStep = 0;
-		if (btFuzzyZero(timeStep))
-		{
-			numSimulationSubSteps = 0;
-			maxSubSteps = 0;
-		} else
-		{
-			numSimulationSubSteps = 1;
-			maxSubSteps = 1;
-		}
-	}
+	int numSimulationSubSteps = SubSteps;
+	m_localTime += timeStep;
+	m_fixedTimeStep = timeStep / SubSteps;
+	//if (maxSubSteps)
+	//{
+	//	//fixed timestep with interpolation
+	//	m_fixedTimeStep = fixedTimeStep;
+	//	m_localTime += timeStep;
+	//	if (m_localTime >= fixedTimeStep)
+	//	{
+	//		numSimulationSubSteps = int( m_localTime / fixedTimeStep);
+	//		m_localTime -= numSimulationSubSteps * fixedTimeStep;
+	//	}
+	//} else
+	//{
+	//	//variable timestep
+	//	fixedTimeStep = timeStep;
+	//	m_localTime = m_latencyMotionStateInterpolation ? 0 : timeStep;
+	//	m_fixedTimeStep = 0;
+	//	if (btFuzzyZero(timeStep))
+	//	{
+	//		numSimulationSubSteps = 0;
+	//		maxSubSteps = 0;
+	//	} else
+	//	{
+	//		numSimulationSubSteps = 1;
+	//		maxSubSteps = 1;
+	//	}
+	//}
 
 	//process some debugging flags
 	if (getDebugDrawer())
@@ -439,30 +460,27 @@ int	btDiscreteDynamicsWorld::stepSimulation( btScalar timeStep,int maxSubSteps, 
 		btIDebugDraw* debugDrawer = getDebugDrawer ();
 		gDisableDeactivation = (debugDrawer->getDebugMode() & btIDebugDraw::DBG_NoDeactivation) != 0;
 	}
-	if (numSimulationSubSteps)
+	
+	
+
+	//clamp the number of substeps, to prevent simulation grinding spiralling down to a halt
+	/*int clampedSimulationSteps = (numSimulationSubSteps > maxSubSteps)? maxSubSteps : numSimulationSubSteps;*/
+
+	//saveKinematicState(fixedTimeStep*clampedSimulationSteps);
+	saveKinematicState(timeStep);
+	applyGravity();
+
+
+
+	for (int i = 0; i<SubSteps; i++)
 	{
-
-		//clamp the number of substeps, to prevent simulation grinding spiralling down to a halt
-		int clampedSimulationSteps = (numSimulationSubSteps > maxSubSteps)? maxSubSteps : numSimulationSubSteps;
-
-		saveKinematicState(fixedTimeStep*clampedSimulationSteps);
-
-		applyGravity();
-
-
-
-		for (int i=0;i<clampedSimulationSteps;i++)
-		{
-			internalSingleStepSimulation(fixedTimeStep);
-			synchronizeMotionStates();
-		}
-
-	} else
-	{
+		internalSingleStepSimulation(timeStep/SubSteps);
 		synchronizeMotionStates();
 	}
 
-	clearForces();
+	
+
+	//clearForces();
 
 #ifndef BT_NO_PROFILE
 	CProfileManager::Increment_Frame_Counter();
@@ -488,7 +506,8 @@ void	btDiscreteDynamicsWorld::internalSingleStepSimulation(btScalar timeStep)
 	dispatchInfo.m_timeStep = timeStep;
 	dispatchInfo.m_stepCount = 0;
 	dispatchInfo.m_debugDraw = getDebugDrawer();
-
+	dispatchInfo.m_mi_periodic = m_mi_periodic;
+	dispatchInfo.m_mx_periodic = m_mx_periodic;
 
     createPredictiveContacts(timeStep);
 
@@ -499,9 +518,8 @@ void	btDiscreteDynamicsWorld::internalSingleStepSimulation(btScalar timeStep)
 
 
 	getSolverInfo().m_timeStep = timeStep;
-
-
-
+	getSolverInfo().m_box_periodic = m_mx_periodic - m_mi_periodic;
+	
 	///solve contact and other joint constraints
 	solveConstraints(getSolverInfo());
 
@@ -533,6 +551,24 @@ void	btDiscreteDynamicsWorld::setGravity(const btVector3& gravity)
 		}
 	}
 }
+
+void	btDiscreteDynamicsWorld::setPeriodicBoundary(btVector3& mi_periodic, btVector3& mx_periodic)
+{
+	m_mi_periodic = mi_periodic;
+	m_mx_periodic = mx_periodic;
+
+}
+void	btDiscreteDynamicsWorld::enablePeriodicBoundary(bool enable[3])
+{
+	m_is_periodic[0] = enable[0];
+	m_is_periodic[1] = enable[1];
+	m_is_periodic[2] = enable[2];
+
+}
+
+
+
+
 
 btVector3 btDiscreteDynamicsWorld::getGravity () const
 {
@@ -987,9 +1023,33 @@ void	btDiscreteDynamicsWorld::integrateTransforms(btScalar timeStep)
 		{
 
 			body->predictIntegratedTransform(timeStep, predictedTrans);
+			
+			
+
 
 			btScalar squareMotion = (predictedTrans.getOrigin()-body->getWorldTransform().getOrigin()).length2();
 
+			btVector3 box_PBC = m_mx_periodic - m_mi_periodic;
+			btVector3 box_origin = predictedTrans.getOrigin();
+			/*getOrigin()*/
+			for (unsigned int i = 0; i < 3; i++)
+			{
+				if (box_PBC.m_floats[i] > 0)
+				{
+					if (box_origin.m_floats[i] >= m_mx_periodic.m_floats[i])
+					{
+						box_origin.m_floats[i] = box_origin.m_floats[i] - box_PBC.m_floats[i];
+					}
+					else
+					{
+						if (box_origin.m_floats[i] < m_mi_periodic.m_floats[i])
+						{
+							box_origin.m_floats[i] = box_origin.m_floats[i] + box_PBC.m_floats[i];
+						}
+					}
+				}
+			}
+			predictedTrans.setOrigin(box_origin);
 
 
 			if (getDispatchInfo().m_useContinuous && body->getCcdSquareMotionThreshold() && body->getCcdSquareMotionThreshold() < squareMotion)
@@ -1490,6 +1550,7 @@ void	btDiscreteDynamicsWorld::serializeDynamicsWorldInfo(btSerializer* serialize
 		worldInfo->m_solverInfo.m_solverMode = getSolverInfo().m_solverMode;
 		worldInfo->m_solverInfo.m_restingContactRestitutionThreshold = getSolverInfo().m_restingContactRestitutionThreshold;
 		worldInfo->m_solverInfo.m_minimumSolverBatchSize = getSolverInfo().m_minimumSolverBatchSize;
+		
 
 		worldInfo->m_solverInfo.m_splitImpulse = getSolverInfo().m_splitImpulse;
 

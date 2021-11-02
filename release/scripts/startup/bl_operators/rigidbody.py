@@ -210,6 +210,74 @@ class BakeToKeyframes(Operator):
         return wm.invoke_props_dialog(self)
 
 
+class RecordState(Operator):
+    '''record rigid body transformations at the current frame'''
+    bl_idname = "rigidbody.record_state"
+    bl_label = "Record State"
+    bl_options = {'REGISTER', 'UNDO'}
+
+  
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        return (obj and obj.rigid_body)
+
+    def execute(self, context):
+        
+       
+        scene = context.scene
+        
+        # filter objects selection
+        for obj in  scene.objects:
+            
+            if not obj.rigid_body or obj.rigid_body.type != 'ACTIVE':
+                obj.select = False
+            else:
+                obj.select=True
+                
+
+
+        objects = context.selected_objects
+
+        if objects:
+           
+
+            # apply transformations as keyframes
+          
+                
+            for obj in objects:
+                mat = obj.matrix_world.copy()
+                # convert world space transform to parent space, so parented objects don't get offset after baking
+                if (obj.parent):
+                    mat = obj.matrix_parent_inverse.inverted() * obj.parent.matrix_world.inverted() * mat
+
+                obj.location = mat.to_translation()
+
+                rot_mode = obj.rotation_mode
+                if rot_mode == 'QUATERNION':
+                    q1 = obj.rotation_quaternion
+                    q2 = mat.to_quaternion()
+                    # make quaternion compatible with the previous one
+                    if q1.dot(q2) < 0.0:
+                        obj.rotation_quaternion = -q2
+                    else:
+                        obj.rotation_quaternion = q2
+                elif rot_mode == 'AXIS_ANGLE':
+                    # this is a little roundabout but there's no better way right now
+                    aa = mat.to_quaternion().to_axis_angle()
+                    obj.rotation_axis_angle = (aa[1], *aa[0])
+                else:  # euler
+                    # make sure euler rotation is compatible to previous frame
+                    # NOTE: assume that on first frame, the starting rotation is appropriate
+                    obj.rotation_euler = mat.to_euler(rot_mode, obj.rotation_euler)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        return {'FINISHED'}
+
+   
+
+
 class ConnectRigidBodies(Operator):
     '''Create rigid body constraints between selected rigid bodies'''
     bl_idname = "rigidbody.connect"
@@ -317,4 +385,6 @@ classes = (
     BakeToKeyframes,
     ConnectRigidBodies,
     CopyRigidbodySettings,
+    RecordState,
+
 )

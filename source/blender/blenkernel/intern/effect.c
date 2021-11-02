@@ -35,6 +35,10 @@
 #include <math.h>
 #include <stdlib.h>
 
+
+#include "Bullet-C-Api.h"
+#include "BLI_array.h"
+
 #include "MEM_guardedalloc.h"
 
 #include "DNA_curve_types.h"
@@ -46,6 +50,8 @@
 #include "DNA_particle_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_rigidbody_types.h"
+
 
 #include "BLI_math.h"
 #include "BLI_blenlib.h"
@@ -821,7 +827,7 @@ static void do_texture_effector(EffectorCache *eff, EffectorData *efd, EffectedP
 
 	add_v3_v3(total_force, force);
 }
-static void do_physical_effector(EffectorCache *eff, EffectorData *efd, EffectedPoint *point, float *total_force)
+static void do_physical_effector(EffectorCache *eff, EffectorData *efd, EffectedPoint *point, float *total_force,float eff_area)
 {
 	PartDeflect *pd = eff->pd;
 	RNG *rng = pd->rng;
@@ -844,10 +850,10 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 	switch (pd->forcefield) {
 		case PFIELD_WIND:
 			copy_v3_v3(force, efd->nor);
-			mul_v3_fl(force, strength * efd->falloff);
+			mul_v3_fl(force, strength * efd->falloff*eff_area);
 			break;
 		case PFIELD_FORCE:
-			normalize_v3(force);
+			copy_v3_v3(force, efd->nor);
 			if (pd->flag & PFIELD_GRAVITATION){ /* Option: Multiply by 1/distance^2 */
 				if (efd->distance < FLT_EPSILON){
 					strength = 0.0f;
@@ -856,7 +862,7 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 					strength *= powf(efd->distance, -2.0f);
 				}
 			}
-			mul_v3_fl(force, strength * efd->falloff);
+			mul_v3_fl(force, strength * efd->falloff*eff_area);
 			break;
 		case PFIELD_VORTEX:
 			/* old vortex force */
@@ -950,7 +956,8 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 	}
 
 	if (pd->flag & PFIELD_DO_LOCATION) {
-		madd_v3_v3fl(total_force, force, 1.0f/point->vel_to_sec);
+		madd_v3_v3fl(total_force, force, 1.0f);
+		/*madd_v3_v3fl(total_force, force, 1.0f / point->vel_to_sec);*/
 
 		if (ELEM(pd->forcefield, PFIELD_HARMONIC, PFIELD_DRAG, PFIELD_SMOKEFLOW)==0 && pd->f_flow != 0.0f) {
 			madd_v3_v3fl(total_force, point->vel, -pd->f_flow * efd->falloff);
@@ -971,6 +978,100 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
 	}
 }
 
+float rigidbody_cal_eff_area(Object *ob, EffectorData *efd)
+{
+	BoundBox *bb = NULL;
+	int *fvi = NULL;
+	BLI_array_declare(fvi);
+	float(*coords)[3] = MEM_callocN(sizeof(*coords) * 8, __func__);
+	int i, count = 0;
+	plConvexHull hull;
+	float tmat[3][3];
+	float eff_area = 0.0f;
+	float  temp[3] = { 0.0f, 0.0f, 0.0f };
+	float  temp1[3] = { 0.0f, 0.0f, 0.0f };
+	float size[3] = { 1.0f, 1.0f, 1.0f };
+	float radius = 1.0f;
+
+
+	bb = BKE_object_boundbox_get(ob);
+	BKE_object_rot_to_mat3(ob, tmat, true);
+
+
+	if (bb) {
+
+		size[0] = (bb->vec[4][0] - bb->vec[0][0]);
+		size[1] = (bb->vec[2][1] - bb->vec[0][1]);
+		size[2] = (bb->vec[1][2] - bb->vec[0][2]);
+	
+		mul_v3_fl(size, 0.5f);
+		radius = MAX3(size[0], size[1], size[2]);
+
+		if (ob->rigidbody_object->shape==1){
+			return 3.1415*radius*radius;
+		}
+
+		for (i = 0; i < 8; i++) {
+			
+			copy_v3_v3(coords[i], bb->vec[i]);
+
+			temp[0] = dot_m3_v3_row_x(tmat,coords[i]);
+			temp[1] = dot_m3_v3_row_y(tmat, coords[i]);
+			temp[2] = dot_m3_v3_row_z(tmat, coords[i]);
+
+			copy_v3_v3(coords[i], temp);
+			copy_v3_v3(temp1, efd->nor);
+			mul_v3_fl(temp1, dot_v3v3(temp, efd->nor));
+			sub_v3_v3(coords[i], temp1);
+		};
+		hull = plConvexHullCompute(coords, 8);
+		
+
+		const int num_verts = plConvexHullNumVertices(hull);
+		count = plConvexHullNumFaces(hull);
+		
+		for (i = 0; i < count; i++) {
+			const int len = plConvexHullGetFaceSize(hull, i);
+			if (len > 2) {
+				int j;
+				int original_index;
+				float  temp1[3] = { 0.0f, 0.0f, 0.0f };
+				float  temp2[3] = { 0.0f, 0.0f, 0.0f };
+
+				float(*loc)[3] = MEM_callocN(sizeof(*loc) * 3, __func__);
+				/* Get face vertex indices */
+				BLI_array_empty(fvi);
+				BLI_array_grow_items(fvi, len);
+				plConvexHullGetFaceVertices(hull, i, fvi);
+
+
+				plConvexHullGetVertex(hull, fvi[0], loc[0], &original_index);
+
+				for (j = 2; j < len; j++) {
+
+					zero_v3(temp);
+					plConvexHullGetVertex(hull, fvi[j - 1], loc[1], &original_index);
+					plConvexHullGetVertex(hull, fvi[j], loc[2], &original_index);
+					sub_v3_v3v3(temp1, loc[1], loc[0]);
+					sub_v3_v3v3(temp2, loc[2], loc[0]);
+					cross_v3_v3v3(temp, temp1, temp2);
+					eff_area = eff_area + len_v3(temp);
+				}
+			}
+
+		}
+	}
+	
+	BLI_array_free(fvi);
+	plConvexHullDelete(hull);
+	
+	MEM_freeN(coords);
+
+	return eff_area*0.25f;
+
+}
+
+
 /*  -------- pdDoEffectors() --------
  * generic force/speed system, now used for particles and softbodies
  * scene       = scene where it runs in, for time and stuff
@@ -984,7 +1085,7 @@ static void do_physical_effector(EffectorCache *eff, EffectorData *efd, Effected
  * flags		= only used for softbody wind now
  * guide		= old speed of particle
  */
-void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *weights, EffectedPoint *point, float *force, float *impulse)
+void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *weights, EffectedPoint *point, float *force, float *impulse, Object *ob)
 {
 	/*
 	 * Modifies the force on a particle according to its
@@ -1002,6 +1103,7 @@ void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *we
 	EffectorCache *eff;
 	EffectorData efd;
 	int p=0, tot = 1, step = 1;
+	float eff_area=0.0f;
 
 	/* Cycle through collected objects, get total of (1/(gravity_strength * dist^gravity_power)) */
 	/* Check for min distance here? (yes would be cool to add that, ton) */
@@ -1027,8 +1129,8 @@ void pdDoEffectors(ListBase *effectors, ListBase *colliders, EffectorWeights *we
 				else {
 					float temp1[3] = {0, 0, 0}, temp2[3];
 					copy_v3_v3(temp1, force);
-
-					do_physical_effector(eff, &efd, point, force);
+					eff_area = rigidbody_cal_eff_area(ob, &efd);
+					do_physical_effector(eff, &efd, point, force,eff_area);
 					
 					/* for softbody backward compatibility */
 					if (point->flag & PE_WIND_AS_SPEED && impulse) {

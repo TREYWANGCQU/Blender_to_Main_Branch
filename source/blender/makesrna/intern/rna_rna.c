@@ -100,6 +100,14 @@ EnumPropertyItem rna_enum_property_unit_items[] = {
 	{PROP_UNIT_VELOCITY, "VELOCITY", 0, "Velocity", ""},
 	{PROP_UNIT_ACCELERATION, "ACCELERATION", 0, "Acceleration", ""},
 	{PROP_UNIT_CAMERA, "CAMERA", 0, "Camera", ""},
+	{ PROP_UNIT_POWER, "POWER", 0, "Power", "" },
+	{ PROP_UNIT_TEMPERATURE, "TEMPERATURE", 0, "Temperature", "" },
+	{ PROP_UNIT_FORCE, "FORCE", 0, "Force", "" },
+	{ PROP_UNIT_STRESS, "STRESS", 0, "Stress", "" },
+	{ PROP_UNIT_TORQUE, "TORQUE", 0, "Torque", "" },
+	{ PROP_UNIT_ANVELOCITY, "ANVELOCITY", 0, "AnVelocity", "" },
+	{ PROP_UNIT_IMPULSE, "IMPULSE", 0, "Impulse", "" },
+	{ PROP_UNIT_IMPULSE_MOMENT, "IMPULSE_MOMENT", 0, "Impulse_Mo", "" },
 	{0, NULL, 0, NULL, NULL}
 };
 

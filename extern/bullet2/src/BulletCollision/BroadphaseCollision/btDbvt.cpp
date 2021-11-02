@@ -183,7 +183,7 @@ static btDbvtNode*				removeleaf(	btDbvt* pdbvt,
 	{
 		btDbvtNode*	parent=leaf->parent;
 		btDbvtNode*	prev=parent->parent;
-		btDbvtNode*	sibling=parent->childs[1-indexof(leaf)];			
+		btDbvtNode*	sibling=parent->childs[1-indexof(leaf)];//sibling node 			
 		if(prev)
 		{
 			prev->childs[indexof(parent)]=sibling;
@@ -415,6 +415,9 @@ btDbvt::btDbvt()
 	m_lkhd		=	-1;
 	m_leaves	=	0;
 	m_opath		=	0;
+	
+	m_box_Periodic[0] = m_box_Periodic[1] = m_box_Periodic[2] = btScalar(0.0);
+
 }
 
 //
@@ -434,6 +437,7 @@ void			btDbvt::clear()
 	m_stkStack.clear();
 	m_opath		=	0;
 	
+	m_box_Periodic[0] = m_box_Periodic[1] = m_box_Periodic[2]=btScalar(0.0);
 }
 
 //
@@ -448,8 +452,12 @@ void			btDbvt::optimizeBottomUp()
 		m_root=leaves[0];
 	}
 }
+void			btDbvt::set_box_Periodic(btVector3 box_size){
+	m_box_Periodic = box_size;
+}
 
 //
+
 void			btDbvt::optimizeTopDown(int bu_treshold)
 {
 	if(m_root)

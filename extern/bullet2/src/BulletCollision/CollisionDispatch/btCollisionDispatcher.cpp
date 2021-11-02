@@ -258,7 +258,32 @@ void btCollisionDispatcher::defaultNearCallback(btBroadphasePair& collisionPair,
 
 		if (dispatcher.needsCollision(colObj0,colObj1))
 		{
-			btCollisionObjectWrapper obj0Wrap(0,colObj0->getCollisionShape(),colObj0,colObj0->getWorldTransform(),-1,-1);
+			btTransform trans0 = colObj0->getWorldTransform();
+			btTransform trans1 = colObj1->getWorldTransform();
+			btVector3 dist =trans0.getOrigin()-trans1.getOrigin();
+			btVector3 box_PBC = dispatchInfo.m_mx_periodic - dispatchInfo.m_mi_periodic;
+			btVector3 shift;
+			shift.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+			for (unsigned int i = 0; i < 3; i++)
+			{
+				if (box_PBC.m_floats[i]>0)
+				{
+					if (dist.m_floats[i] >= 0.5*box_PBC.m_floats[i])
+					{
+						shift.m_floats[i] = -box_PBC.m_floats[i];
+					}
+					else
+					{
+						if (dist.m_floats[i]<-0.5*box_PBC.m_floats[i])
+						{
+							shift.m_floats[i] = box_PBC.m_floats[i];
+						}
+					}
+				}
+			}
+			trans0.setOrigin(trans0.getOrigin() + shift);
+			colObj0->setWorldTransform(trans0);
+			btCollisionObjectWrapper obj0Wrap(0, colObj0->getCollisionShape(), colObj0, colObj0->getWorldTransform(), -1, -1);
 			btCollisionObjectWrapper obj1Wrap(0,colObj1->getCollisionShape(),colObj1,colObj1->getWorldTransform(),-1,-1);
 
 
@@ -277,6 +302,7 @@ void btCollisionDispatcher::defaultNearCallback(btBroadphasePair& collisionPair,
 					//discrete collision detection query
 					
 					collisionPair.m_algorithm->processCollision(&obj0Wrap,&obj1Wrap,dispatchInfo,&contactPointResult);
+					
 				} else
 				{
 					//continuous collision detection query, time of impact (toi)
@@ -286,6 +312,8 @@ void btCollisionDispatcher::defaultNearCallback(btBroadphasePair& collisionPair,
 
 				}
 			}
+			trans0.setOrigin(trans0.getOrigin() - shift);
+			colObj0->setWorldTransform(trans0);
 		}
 
 }

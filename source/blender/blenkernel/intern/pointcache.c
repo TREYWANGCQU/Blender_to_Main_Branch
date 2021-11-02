@@ -127,8 +127,10 @@ static int ptcache_data_size[] = {
 		4 * sizeof(float), // BPHYS_DATA_ROTATION
 		3 * sizeof(float), // BPHYS_DATA_AVELOCITY / BPHYS_DATA_XCONST
 		sizeof(float), // BPHYS_DATA_SIZE
-		3 * sizeof(float), // BPHYS_DATA_TIMES
-		sizeof(BoidData) // case BPHYS_DATA_BOIDS
+		3 * sizeof(float), // BPHYS_DATA_TIMES//BPHYS_DATA_FORCE
+		sizeof(BoidData), // case BPHYS_DATA_BOIDS
+		3 * sizeof(float), // BPHYS_DATA_TORQUE
+		26*sizeof(float) // BPHYS_DATA_CONTACT
 };
 
 static int ptcache_extra_datasize[] = {
@@ -1280,6 +1282,8 @@ static int  ptcache_rigidbody_write(int index, void *rb_v, void **data, int UNUS
 {
 	RigidBodyWorld *rbw = rb_v;
 	Object *ob = NULL;
+	float contacts_info[26];
+	
 	
 	if (rbw->objects)
 		ob = rbw->objects[index];
@@ -1291,9 +1295,57 @@ static int  ptcache_rigidbody_write(int index, void *rb_v, void **data, int UNUS
 #ifdef WITH_BULLET
 			RB_body_get_position(rbo->physics_object, rbo->pos);
 			RB_body_get_orientation(rbo->physics_object, rbo->orn);
+			RB_body_get_linear_velocity(rbo->physics_object, rbo->lin_vel);
+			RB_body_get_angular_velocity(rbo->physics_object, rbo->an_vel);
+			RB_body_get_totalforce(rbo->physics_object, rbo->totalforce);
+			RB_body_get_totaltorque(rbo->physics_object, rbo->totaltorque);
+			RB_body_get_chris_stress(rbo->physics_object, rbo->chris_stress_x, rbo->chris_stress_y, rbo->chris_stress_z);
+
+			rbo->num_contacts = RB_body_get_num_contacts(rbo->physics_object);
+			rbo->rigidbody_id = RB_body_get_rigidbodyId(rbo->physics_object);
+			RB_body_get_ForcechainId(rbo->physics_object, rbo->forcechain_id);
+			RB_body_get_ForcechainForce(rbo->physics_object, rbo->forcechain_force);
+			RB_body_get_ForcechainNormal(rbo->physics_object, rbo->forcechain_normal1, rbo->forcechain_normal2, rbo->forcechain_normal3);
+			contacts_info[0] = rbo->num_contacts;
+			contacts_info[1] = rbo->forcechain_force[0];
+			contacts_info[2] = rbo->forcechain_force[1];
+			contacts_info[3] = rbo->forcechain_force[2];
+			contacts_info[4] = rbo->forcechain_normal1[0];
+			contacts_info[5] = rbo->forcechain_normal1[1];
+			contacts_info[6] = rbo->forcechain_normal1[2];
+			contacts_info[7] = rbo->forcechain_normal2[0];
+			contacts_info[8] = rbo->forcechain_normal2[1];
+			contacts_info[9] = rbo->forcechain_normal2[2];
+			contacts_info[10] = rbo->forcechain_normal3[0];
+			contacts_info[11] = rbo->forcechain_normal3[1];
+			contacts_info[12] = rbo->forcechain_normal3[2];
+			contacts_info[13] = rbo->rigidbody_id;
+			contacts_info[14] = rbo->forcechain_id[0];
+			contacts_info[15] = rbo->forcechain_id[1];
+			contacts_info[16] = rbo->forcechain_id[2];
+
+			contacts_info[17] = rbo->chris_stress_x[0];
+			contacts_info[18] = rbo->chris_stress_x[1];
+			contacts_info[19] = rbo->chris_stress_x[2];
+			contacts_info[20] = rbo->chris_stress_y[0];
+			contacts_info[21] = rbo->chris_stress_y[1];
+			contacts_info[22] = rbo->chris_stress_y[2];
+			contacts_info[23] = rbo->chris_stress_z[0];
+			contacts_info[24] = rbo->chris_stress_z[1];
+			contacts_info[25] = rbo->chris_stress_z[2];
+
+			
+
+			
 #endif
+			
 			PTCACHE_DATA_FROM(data, BPHYS_DATA_LOCATION, rbo->pos);
 			PTCACHE_DATA_FROM(data, BPHYS_DATA_ROTATION, rbo->orn);
+			PTCACHE_DATA_FROM(data, BPHYS_DATA_VELOCITY, rbo->lin_vel);
+			PTCACHE_DATA_FROM(data, BPHYS_DATA_AVELOCITY, rbo->an_vel);
+			PTCACHE_DATA_FROM(data, BPHYS_DATA_FORCE, rbo->totalforce);
+			PTCACHE_DATA_FROM(data, BPHYS_DATA_TORQUE, rbo->totaltorque);
+			PTCACHE_DATA_FROM(data, BPHYS_DATA_CONTACT, contacts_info);
 		}
 	}
 
@@ -1303,7 +1355,8 @@ static void ptcache_rigidbody_read(int index, void *rb_v, void **data, float UNU
 {
 	RigidBodyWorld *rbw = rb_v;
 	Object *ob = NULL;
-	
+	float contacts_info[26];
+
 	if (rbw->objects)
 		ob = rbw->objects[index];
 	
@@ -1317,8 +1370,42 @@ static void ptcache_rigidbody_read(int index, void *rb_v, void **data, float UNU
 				memcpy(rbo->orn, data + 3, 4 * sizeof(float));
 			}
 			else {
+				
 				PTCACHE_DATA_TO(data, BPHYS_DATA_LOCATION, 0, rbo->pos);
 				PTCACHE_DATA_TO(data, BPHYS_DATA_ROTATION, 0, rbo->orn);
+				PTCACHE_DATA_TO(data, BPHYS_DATA_VELOCITY, 0, rbo->lin_vel);
+				PTCACHE_DATA_TO(data, BPHYS_DATA_AVELOCITY, 0, rbo->an_vel);
+				PTCACHE_DATA_TO(data, BPHYS_DATA_FORCE, 0, rbo->totalforce);
+				PTCACHE_DATA_TO(data, BPHYS_DATA_TORQUE, 0, rbo->totaltorque);
+				PTCACHE_DATA_TO(data, BPHYS_DATA_CONTACT, 0, contacts_info);
+				rbo->num_contacts = contacts_info[0];
+				rbo->forcechain_force[0] =contacts_info[1];
+				rbo->forcechain_force[1] = contacts_info[2];
+				rbo->forcechain_force[2] = contacts_info[3];
+				rbo->forcechain_normal1[0] = contacts_info[4];
+				rbo->forcechain_normal1[1] = contacts_info[5];
+				rbo->forcechain_normal1[2] = contacts_info[6];
+				rbo->forcechain_normal2[0] = contacts_info[7];
+				rbo->forcechain_normal2[1] = contacts_info[8];
+				rbo->forcechain_normal2[2] = contacts_info[9];
+				rbo->forcechain_normal3[0] = contacts_info[10];
+				rbo->forcechain_normal3[1] = contacts_info[11];
+				rbo->forcechain_normal3[2] = contacts_info[12];
+				rbo->rigidbody_id = contacts_info[13];
+				rbo->forcechain_id[0] = contacts_info[14];
+				rbo->forcechain_id[1] = contacts_info[15];
+				rbo->forcechain_id[2] = contacts_info[16];
+
+				rbo->chris_stress_x[0] = contacts_info[17];
+				rbo->chris_stress_x[1] = contacts_info[18];
+				rbo->chris_stress_x[2] = contacts_info[19];
+				rbo->chris_stress_y[0] = contacts_info[20];
+				rbo->chris_stress_y[1] = contacts_info[21];
+				rbo->chris_stress_y[2] = contacts_info[22];
+				rbo->chris_stress_z[0] = contacts_info[23];
+				rbo->chris_stress_z[1] = contacts_info[24];
+				rbo->chris_stress_z[2] = contacts_info[25];
+
 			}
 		}
 	}
@@ -1636,7 +1723,7 @@ void BKE_ptcache_id_from_rigidbody(PTCacheID *pid, Object *ob, RigidBodyWorld *r
 	pid->write_header			= ptcache_basic_header_write;
 	pid->read_header			= ptcache_basic_header_read;
 	
-	pid->data_types= (1<<BPHYS_DATA_LOCATION) | (1<<BPHYS_DATA_ROTATION);
+	pid->data_types =  (1 << BPHYS_DATA_LOCATION) | (1 << BPHYS_DATA_ROTATION) | (1 << BPHYS_DATA_VELOCITY) | (1 << BPHYS_DATA_AVELOCITY) | (1 << BPHYS_DATA_FORCE) | (1 << BPHYS_DATA_TORQUE) | (1 << BPHYS_DATA_CONTACT);
 	pid->info_types= 0;
 	
 	pid->stack_index = pid->cache->index;
@@ -2101,6 +2188,8 @@ static void ptcache_file_pointers_init(PTCacheFile *pf)
 	pf->cur[BPHYS_DATA_SIZE] =		(data_types & (1<<BPHYS_DATA_SIZE))		?		&pf->data.size	: NULL;
 	pf->cur[BPHYS_DATA_TIMES] =		(data_types & (1<<BPHYS_DATA_TIMES))	?		&pf->data.times	: NULL;
 	pf->cur[BPHYS_DATA_BOIDS] =		(data_types & (1<<BPHYS_DATA_BOIDS))	?		&pf->data.boids	: NULL;
+	pf->cur[BPHYS_DATA_TORQUE] = (data_types & (1 << BPHYS_DATA_TORQUE)) ? &pf->data.tottorque : NULL;
+	pf->cur[BPHYS_DATA_CONTACT] = (data_types & (1 << BPHYS_DATA_CONTACT)) ? &pf->data.contacts_info : NULL;
 }
 
 /* Check to see if point number "index" is in pm, uses binary search for index data. */

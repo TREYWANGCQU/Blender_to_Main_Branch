@@ -137,11 +137,61 @@ class PHYSICS_PT_rigid_body_dynamics(PHYSICS_PT_rigidbody_panel, Panel):
         col.prop(rbo, "linear_damping", text="Translation")
         col.prop(rbo, "angular_damping", text="Rotation")
 
+class PHYSICS_PT_rigid_body_data(PHYSICS_PT_rigidbody_panel, Panel):
+    bl_label = "Rigid Body Data"
+    bl_default_closed = True
+    COMPAT_ENGINES = {'BLENDER_RENDER'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.object
+        return (obj and obj.rigid_body and
+                obj.rigid_body.type == 'ACTIVE' and
+                (context.scene.render.engine in cls.COMPAT_ENGINES))
+
+    def draw(self, context):
+        layout = self.layout
+
+        ob = context.object
+        rbo = ob.rigid_body
+
+        #col = layout.column(align=1)
+        #col.label(text="Activation:")
+        # XXX: settings such as activate on collison/etc.
+
+        split = layout.split()
+
+        col = split.column()
+        col.label(text="Tranformation:")
+        col.prop(rbo, "lin_vel", text="Linear veloctiy")
+        col.prop(rbo, "an_vel", text="Angular velocity")
+        col.prop(rbo, "pos", text="Position")
+        col.prop(rbo, "orn", text="Orientation")
+
+
+        # TODO: other params such as time?
+
+        col = split.column()
+        col.label(text="Force:")
+        col.prop(rbo, "totalforce", text="Total Force")
+        col.prop(rbo, "totaltorque", text="Total Torque")
+        col.prop(rbo, "num_contacts", text="number of Contacts")
+        # col.prop(rbo, "rigidbody_id", text="ID")
+        # col.prop(rbo, "forcechain_id", text="Chain ID")
+        col.prop(rbo, "forcechain_force", text="Chain Force")
+        col.prop(rbo, "chris_stress_z", text="Christoffersen stress sigma_zi(i=x,y,z)")
+        # col.prop(rbo, "forcechain_normal", text="Chain Normal")
+
+
+
+            
 
 classes = (
     PHYSICS_PT_rigid_body,
     PHYSICS_PT_rigid_body_collisions,
     PHYSICS_PT_rigid_body_dynamics,
+    PHYSICS_PT_rigid_body_data,
+    
 )
 
 if __name__ == "__main__":  # only for live edit.

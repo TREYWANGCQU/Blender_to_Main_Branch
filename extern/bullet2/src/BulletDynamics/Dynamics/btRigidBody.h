@@ -38,6 +38,7 @@ extern bool gDisableDeactivation;
 #endif //BT_USE_DOUBLE_PRECISION
 
 
+
 enum	btRigidBodyFlags
 {
 	BT_DISABLE_WORLD_GRAVITY = 1,
@@ -48,6 +49,7 @@ enum	btRigidBodyFlags
 	BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_WORLD=4,
 	BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY=8,
 	BT_ENABLE_GYROPSCOPIC_FORCE = BT_ENABLE_GYROSCOPIC_FORCE_IMPLICIT_BODY,
+
 };
 
 
@@ -59,6 +61,10 @@ enum	btRigidBodyFlags
 ///- C) Kinematic objects, which are objects without mass, but the user can move them. There is on-way interaction, and Bullet calculates a velocity based on the timestep and previous and current world transform.
 ///Bullet automatically deactivates dynamic rigid bodies, when the velocity is below a threshold for a given time.
 ///Deactivated (sleeping) rigid bodies don't take any processing time, except a minor broadphase collision detection impact (to allow active objects to activate/wake up sleeping objects)
+
+
+
+
 class btRigidBody  : public btCollisionObject
 {
 
@@ -73,7 +79,14 @@ class btRigidBody  : public btCollisionObject
 	btVector3		m_invInertiaLocal;
 	btVector3		m_totalForce;
 	btVector3		m_totalTorque;
+
+	btVector3		m_totalForceRecord;
+	btVector3		m_totalTorqueRecord;
+	int				m_numContacts;
+
 	
+
+
 	btScalar		m_linearDamping;
 	btScalar		m_angularDamping;
 
@@ -93,9 +106,25 @@ class btRigidBody  : public btCollisionObject
 	//keep track of typed constraints referencing this rigid body, to disable collision between linked bodies
 	btAlignedObjectArray<btTypedConstraint*> m_constraintRefs;
 
+	btVector3 m_force_chainsId;
+	btVector3 m_force_chainsForce;
+	btVector3 m_force_chainsNormal1;
+	btVector3 m_force_chainsNormal2;
+	btVector3 m_force_chainsNormal3;
+
+	btVector3 m_chris_stress_x;
+	btVector3 m_chris_stress_y;
+	btVector3 m_chris_stress_z;
+
 	int				m_rigidbodyFlags;
 	
 	int				m_debugBodyId;
+
+	int             m_rigidbodyId;
+	bool		m_enablePeriodic[3];
+	btVector3 m_periodic_target_boundary;
+	btVector3 m_periodic_limit_boundary;
+
 	
 
 protected:
@@ -281,6 +310,12 @@ public:
 		m_totalForce += force*m_linearFactor;
 	}
 
+	/*void resizeForceChains(int num)
+	{
+		m_force_chainsId.resizeNoInitialize(num);
+		m_force_chainsForce.resizeNoInitialize(num);
+	}*/
+
 	const btVector3& getTotalForce() const
 	{
 		return m_totalForce;
@@ -291,10 +326,170 @@ public:
 		return m_totalTorque;
 	};
     
+	const btVector3 getTotalForceRecord() const
+	{
+		
+		return m_totalForce + m_totalForceRecord;
+	};
+
+	
+	const btVector3 getTotalTorqueRecord() const
+	{
+		
+		
+		return  m_totalTorque + m_totalTorqueRecord;
+		
+	};
+
+	const btVector3 getChrisStressX() const
+	{
+
+
+		return  m_chris_stress_x;
+
+	};
+
+
+	const btVector3 getChrisStressY() const
+	{
+
+
+		return  m_chris_stress_y;
+
+	};
+
+
+	const btVector3 getChrisStressZ() const
+	{
+
+
+		return  m_chris_stress_z;
+
+	};
+
+
+
+
+	const btVector3 getForcechainNormal1() const
+	{
+
+
+		return  m_force_chainsNormal1;
+
+	};
+	const btVector3 getForcechainNormal2() const
+	{
+
+
+		return  m_force_chainsNormal2;
+
+	};
+	const btVector3 getForcechainNormal3() const
+	{
+
+
+		return  m_force_chainsNormal3;
+
+	};
+
+
+	const int getNumContacts() const
+	{
+		return m_numContacts;
+	};
+	const int getrigidbodyId() const
+	{
+		return m_rigidbodyId;
+	};
+
+	const btVector3 getforcechainId() const
+	{
+		return m_force_chainsId;
+	};
+
+	const btVector3 getForcechainForce() const
+	{
+		return m_force_chainsForce;
+	};
+
+
+
 	const btVector3& getInvInertiaDiagLocal() const
 	{
 		return m_invInertiaLocal;
 	};
+	
+	void	clearNumContacts()
+	{
+		m_numContacts = 0;
+	}
+	void	addNumContacts()
+	{
+		m_numContacts += 1;
+	}
+	void	setTotalTorqueRecord(const btVector3& torque)
+	{
+		m_totalTorqueRecord = torque;
+	}
+	void setRigidbodyId(int id)
+	{
+		m_rigidbodyId = id;
+	}
+	void	setForceChains(btScalar force, int id, const btVector3& normal, const btVector3& vec_pos)
+	{
+		m_chris_stress_x = m_chris_stress_x+force*normal.m_floats[0] * vec_pos;
+		m_chris_stress_y = m_chris_stress_y+force*normal.m_floats[1] * vec_pos;
+		m_chris_stress_z = m_chris_stress_z+force*normal.m_floats[2] * vec_pos;
+			
+
+
+		if (force>m_force_chainsForce.m_floats[2])
+		{
+			
+			m_force_chainsForce.m_floats[2] = force;
+			m_force_chainsNormal3 = normal;
+			m_force_chainsId.m_floats[2] = id;
+
+			if (m_force_chainsForce.m_floats[2] > m_force_chainsForce.m_floats[1])
+			{
+				btSwap(m_force_chainsForce.m_floats[2], m_force_chainsForce.m_floats[1]);
+				btSwap(m_force_chainsNormal3, m_force_chainsNormal2);
+				btSwap(m_force_chainsId.m_floats[2], m_force_chainsId.m_floats[1]);
+			}
+			if (m_force_chainsForce.m_floats[1] > m_force_chainsForce.m_floats[0])
+			{
+				btSwap(m_force_chainsForce.m_floats[1], m_force_chainsForce.m_floats[0]);
+				btSwap(m_force_chainsNormal1, m_force_chainsNormal2);
+				btSwap(m_force_chainsId.m_floats[1], m_force_chainsId.m_floats[0]);
+			}
+
+
+		}
+		
+	}
+
+
+
+	void	clearForceChains()
+	{
+		m_force_chainsId.m_floats[0] = -1;
+		m_force_chainsId.m_floats[1] = -1;
+		m_force_chainsId.m_floats[2] = -1;
+		m_force_chainsForce.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_force_chainsNormal1.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_force_chainsNormal2.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_force_chainsNormal3.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_chris_stress_x.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_chris_stress_y.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_chris_stress_z.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+
+	}
+
+	void	setTotalForceRecord(const btVector3& force)
+	{
+		m_totalForceRecord =force;
+	}
+
 
 	void	setInvInertiaDiagLocal(const btVector3& diagInvInertia)
 	{
@@ -306,6 +501,10 @@ public:
 		m_linearSleepingThreshold = linear;
 		m_angularSleepingThreshold = angular;
 	}
+
+	
+	
+
 
 	void	applyTorque(const btVector3& torque)
 	{
@@ -344,6 +543,11 @@ public:
 	{
 		m_totalForce.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
 		m_totalTorque.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+	}
+	void clearForcesRecord()
+	{
+		m_totalForceRecord.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+		m_totalTorqueRecord.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
 	}
 	
 	void updateInertiaTensor();    

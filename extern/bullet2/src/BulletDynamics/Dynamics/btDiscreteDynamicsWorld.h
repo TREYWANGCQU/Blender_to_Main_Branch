@@ -50,6 +50,10 @@ protected:
 	btAlignedObjectArray<btRigidBody*> m_nonStaticRigidBodies;
 
 	btVector3	m_gravity;
+	btVector3	m_mi_periodic;
+	btVector3	m_mx_periodic;
+	bool		m_is_periodic[3];
+
 
 	//for variable timesteps
 	btScalar	m_localTime;
@@ -104,7 +108,7 @@ public:
 	virtual ~btDiscreteDynamicsWorld();
 
 	///if maxSubSteps > 0, it will interpolate motion between fixedTimeStep's
-	virtual int	stepSimulation( btScalar timeStep,int maxSubSteps=1, btScalar fixedTimeStep=btScalar(1.)/btScalar(60.));
+	virtual int	stepSimulation( btScalar timeStep,int maxSubSteps=1, int SubSteps=50);
 
 
 	virtual void	synchronizeMotionStates();
@@ -146,6 +150,8 @@ public:
 	virtual void	addRigidBody(btRigidBody* body, short group, short mask);
 
 	virtual void	removeRigidBody(btRigidBody* body);
+	virtual void	setPeriodicBoundary(btVector3& mi_periodic, btVector3& mx_periodic);
+	virtual void	enablePeriodicBoundary(bool enable[3]);
 
 	///removeCollisionObject will first check if it is a rigid body, if so call removeRigidBody otherwise call btCollisionWorld::removeCollisionObject
 	virtual void	removeCollisionObject(btCollisionObject* collisionObject);

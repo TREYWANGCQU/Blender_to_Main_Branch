@@ -145,10 +145,10 @@ struct	btDbvtAabbMm
 	DBVT_INLINE int					Classify(const btVector3& n,btScalar o,int s) const;
 	DBVT_INLINE btScalar			ProjectMinimum(const btVector3& v,unsigned signs) const;
 	DBVT_INLINE friend bool			Intersect(	const btDbvtAabbMm& a,
-		const btDbvtAabbMm& b);
+		const btDbvtAabbMm& b,  btVector3 box_Periodic);
 	
 	DBVT_INLINE friend bool			Intersect(	const btDbvtAabbMm& a,
-		const btVector3& b);
+		const btVector3& b, btVector3 box_Periodic);
 
 	DBVT_INLINE friend btScalar		Proximity(	const btDbvtAabbMm& a,
 		const btDbvtAabbMm& b);
@@ -255,11 +255,14 @@ struct	btDbvt
 	};
 
 	// Fields
-	btDbvtNode*		m_root;
-	btDbvtNode*		m_free;
-	int				m_lkhd;
-	int				m_leaves;
-	unsigned		m_opath;
+	btDbvtNode*		m_root; 
+	btDbvtNode*		m_free;// node buffer last one deleted
+	int				m_lkhd; // number of look ahead
+	int				m_leaves; //number of nodes 
+	unsigned		m_opath; // bitmap, mean the path to the node 
+	
+	btVector3	    m_box_Periodic;
+	
 
 	
 	btAlignedObjectArray<sStkNN>	m_stkStack;
@@ -272,6 +275,8 @@ struct	btDbvt
 	void			clear();
 	bool			empty() const { return(0==m_root); }
 	void			optimizeBottomUp();
+	
+	void			set_box_Periodic(btVector3 box_size);
 	void			optimizeTopDown(int bu_treshold=128);
 	void			optimizeIncremental(int passes);
 	btDbvtNode*		insert(const btDbvtVolume& box,void* data);
@@ -322,9 +327,10 @@ struct	btDbvt
 #endif
 
 	DBVT_PREFIX
-		void		collideTV(	const btDbvtNode* root,
+		void		collideTV(const	 btDbvtNode* root,
 		const btDbvtVolume& volume,
 		DBVT_IPOLICY) const;
+	   
 	///rayTest is a re-entrant ray test, and can be called in parallel as long as the btAlignedAlloc is thread-safe (uses locking etc)
 	///rayTest is slower than rayTestInternal, because it builds a local stack, using memory allocations, and it recomputes signs/rayDirectionInverses each time
 	DBVT_PREFIX
@@ -517,9 +523,13 @@ DBVT_INLINE void		btDbvtAabbMm::AddSpan(const btVector3& d,btScalar& smi,btScala
 }
 
 //
+
 DBVT_INLINE bool		Intersect(	const btDbvtAabbMm& a,
-								  const btDbvtAabbMm& b)
+	const btDbvtAabbMm& b, btVector3 box_Periodic = btVector3(0, 0, 0))
 {
+
+
+
 #if	DBVT_INT0_IMPL == DBVT_IMPL_SSE
 	const __m128	rt(_mm_or_ps(	_mm_cmplt_ps(_mm_load_ps(b.mx),_mm_load_ps(a.mi)),
 		_mm_cmplt_ps(_mm_load_ps(a.mx),_mm_load_ps(b.mi))));
@@ -530,12 +540,49 @@ DBVT_INLINE bool		Intersect(	const btDbvtAabbMm& a,
 #endif
 	return((pu[0]|pu[1]|pu[2])==0);
 #else
-	return(	(a.mi.x()<=b.mx.x())&&
+
+	btVector3 a_aabbMax = a.Maxs();
+	btVector3 a_aabbMin = a.Mins();
+	btVector3 b_aabbMax = b.Maxs();
+	btVector3 b_aabbMin = b.Mins();
+	btVector3 dist = a.Center() - b.Center();
+	btVector3 shift;
+	shift.setValue(btScalar(0.0), btScalar(0.0), btScalar(0.0));
+
+	for (unsigned int i = 0; i < 3; i++)
+	{
+		if (box_Periodic.m_floats[i] > 0)
+		{
+			if (dist.m_floats[i]<-0.5*box_Periodic.m_floats[i])
+			{
+				shift.m_floats[i] = box_Periodic.m_floats[i];
+			}
+			else
+			{
+				if (dist.m_floats[i] >= 0.5*box_Periodic[i])
+					shift.m_floats[i] =- box_Periodic.m_floats[i];
+			}
+		}
+
+			
+	}
+	a_aabbMin = a_aabbMin + shift;
+	a_aabbMax = a_aabbMax + shift;
+
+	
+	return((a_aabbMin[0] <= b_aabbMax[0]) &&
+		(a_aabbMax[0] >= b_aabbMin[0]) &&
+		(a_aabbMin[1] <= b_aabbMax[1]) &&
+		(a_aabbMax[1] >= b_aabbMin[1]) &&
+		(a_aabbMin[2] <= b_aabbMax[2]) &&
+		(a_aabbMax[2] >= b_aabbMin[2]));
+
+	/*return(	(a.mi.x()<=b.mx.x())&&
 		(a.mx.x()>=b.mi.x())&&
 		(a.mi.y()<=b.mx.y())&&
 		(a.mx.y()>=b.mi.y())&&
 		(a.mi.z()<=b.mx.z())&&		
-		(a.mx.z()>=b.mi.z()));
+		(a.mx.z()>=b.mi.z()));*/
 #endif
 }
 
@@ -543,8 +590,9 @@ DBVT_INLINE bool		Intersect(	const btDbvtAabbMm& a,
 
 //
 DBVT_INLINE bool		Intersect(	const btDbvtAabbMm& a,
-								  const btVector3& b)
+	const btVector3& b, btVector3 box_Periodic = btVector3(0, 0, 0))
 {
+
 	return(	(b.x()>=a.mi.x())&&
 		(b.y()>=a.mi.y())&&
 		(b.z()>=a.mi.z())&&
@@ -749,7 +797,7 @@ inline void		btDbvt::collideTT(	const btDbvtNode* root0,
 						stkStack[depth++]=sStkNN(p.a->childs[0],p.a->childs[1]);
 					}
 				}
-				else if(Intersect(p.a->volume,p.b->volume))
+				else if(Intersect(p.a->volume,p.b->volume,m_box_Periodic))
 				{
 					if(p.a->isinternal())
 					{
@@ -796,8 +844,8 @@ inline void		btDbvt::collideTTpersistentStack(	const btDbvtNode* root0,
 			int								depth=1;
 			int								treshold=DOUBLE_STACKSIZE-4;
 			
-			m_stkStack.resize(DOUBLE_STACKSIZE);
-			m_stkStack[0]=sStkNN(root0,root1);
+			m_stkStack.resize(DOUBLE_STACKSIZE);// a stack is created to look around all nodes
+			m_stkStack[0]=sStkNN(root0,root1);// put root nodes into stack
 			do	{		
 				sStkNN	p=m_stkStack[--depth];
 				if(depth>treshold)
@@ -805,6 +853,8 @@ inline void		btDbvt::collideTTpersistentStack(	const btDbvtNode* root0,
 					m_stkStack.resize(m_stkStack.size()*2);
 					treshold=m_stkStack.size()-4;
 				}
+				
+				
 				if(p.a==p.b)
 				{
 					if(p.a->isinternal())
@@ -814,7 +864,7 @@ inline void		btDbvt::collideTTpersistentStack(	const btDbvtNode* root0,
 						m_stkStack[depth++]=sStkNN(p.a->childs[0],p.a->childs[1]);
 					}
 				}
-				else if(Intersect(p.a->volume,p.b->volume))
+				else if (Intersect(p.a->volume, p.b->volume,m_box_Periodic))
 				{
 					if(p.a->isinternal())
 					{
@@ -918,8 +968,11 @@ inline void		btDbvt::collideTT(	const btDbvtNode* root0,
 #endif 
 
 //
+
+
+
 DBVT_PREFIX
-inline void		btDbvt::collideTV(	const btDbvtNode* root,
+inline void		btDbvt::collideTV(const btDbvtNode* root,
 								  const btDbvtVolume& vol,
 								  DBVT_IPOLICY) const
 {
@@ -929,24 +982,25 @@ inline void		btDbvt::collideTV(	const btDbvtNode* root,
 			ATTRIBUTE_ALIGNED16(btDbvtVolume)		volume(vol);
 			btAlignedObjectArray<const btDbvtNode*>	stack;
 			stack.resize(0);
-			stack.reserve(SIMPLE_STACKSIZE);
-			stack.push_back(root);
+			stack.reserve(SIMPLE_STACKSIZE);//a created stack for looking around all nodes
+			stack.push_back(root);//put in root node
 			do	{
 				const btDbvtNode*	n=stack[stack.size()-1];
-				stack.pop_back();
-				if(Intersect(n->volume,volume))
+				stack.pop_back();//top node out
+				
+				if (Intersect(n->volume, volume, m_box_Periodic))
 				{
-					if(n->isinternal())
+					if(n->isinternal())// looking around all the child nodes tree
 					{
 						stack.push_back(n->childs[0]);
 						stack.push_back(n->childs[1]);
 					}
-					else
+					else // if it is a leaf node
 					{
-						policy.Process(n);
+						policy.Process(n); 
 					}
 				}
-			} while(stack.size()>0);
+			} while(stack.size()>0);// run until all intersect leaf node is visited 
 		}
 }
 

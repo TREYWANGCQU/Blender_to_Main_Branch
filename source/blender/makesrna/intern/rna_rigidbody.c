@@ -362,6 +362,10 @@ static void rna_RigidBodyOb_angular_damping_set(PointerRNA *ptr, float value)
 #endif
 }
 
+
+
+
+
 static char *rna_RigidBodyCon_path(PointerRNA *UNUSED(ptr))
 {
 	/* NOTE: this hardcoded path should work as long as only Objects have this */
@@ -761,33 +765,98 @@ static void rna_def_rigidbody_world(BlenderRNA *brna)
 	/* time scale */
 	prop = RNA_def_property(srna, "time_scale", PROP_FLOAT, PROP_NONE);
 	RNA_def_property_float_sdna(prop, NULL, "time_scale");
-	RNA_def_property_range(prop, 0.0f, 100.0f);
+	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, 10.0f, 1, 3);
 	RNA_def_property_float_default(prop, 1.0f);
 	RNA_def_property_ui_text(prop, "Time Scale", "Change the speed of the simulation");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
+
+	/* periodic condition */
+	prop = RNA_def_property(srna, "use_periodic_x", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBW_FLAG_USE_PERIODIC_X);
+	RNA_def_property_ui_text(prop, "use_periodic_x", "enable periodic boundary condition along x axis");
+
+	prop = RNA_def_property(srna, "use_periodic_y", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBW_FLAG_USE_PERIODIC_Y);
+	RNA_def_property_ui_text(prop, "use_periodic_y", "enable periodic boundary condition along y axis");
+
+	prop = RNA_def_property(srna, "use_periodic_z", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "flag", RBW_FLAG_USE_PERIODIC_Z);
+	RNA_def_property_ui_text(prop, "use_periodic_z", "enable periodic boundary condition along z axis");
+
+	prop = RNA_def_property(srna, "upper_periodic_x", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "upper_periodic_x");
+	RNA_def_property_ui_text(prop, "upper_periodic_x", "x upper periodic boundary condition");
+
+	prop = RNA_def_property(srna, "lower_periodic_x", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "lower_periodic_x");
+	RNA_def_property_ui_text(prop, "lower_periodic_x", "x lower periodic boundary condition");
+
+	prop = RNA_def_property(srna, "upper_periodic_y", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "upper_periodic_y");
+	RNA_def_property_ui_text(prop, "upper_periodic_y", "y upper periodic boundary condition");
+
+	prop = RNA_def_property(srna, "lower_periodic_y", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "lower_periodic_y");
+	RNA_def_property_ui_text(prop, "lower_periodic_y", "y lower periodic boundary condition");
+
+	prop = RNA_def_property(srna, "upper_periodic_z", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "upper_periodic_z");
+	RNA_def_property_ui_text(prop, "upper_periodic_z", "z upper periodic boundary condition");
+
+	prop = RNA_def_property(srna, "lower_periodic_z", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "lower_periodic_z");
+	RNA_def_property_ui_text(prop, "lower_periodic_z", "z lower periodic boundary condition");
+
+
 	
 	/* timestep */
-	prop = RNA_def_property(srna, "steps_per_second", PROP_INT, PROP_NONE);
-	RNA_def_property_int_sdna(prop, NULL, "steps_per_second");
-	RNA_def_property_range(prop, 1, SHRT_MAX);
-	RNA_def_property_ui_range(prop, 60, 1000, 1, -1);
-	RNA_def_property_int_default(prop, 60);
-	RNA_def_property_ui_text(prop, "Steps Per Second",
-	                         "Number of simulation steps taken per second (higher values are more accurate "
+	prop = RNA_def_property(srna, "steps_per_frame", PROP_INT, PROP_NONE);
+	RNA_def_property_int_sdna(prop, NULL, "steps_per_frame");
+	RNA_def_property_range(prop, 1, INT_MAX);
+	RNA_def_property_ui_range(prop, 1, 1000, 1, -1);
+	RNA_def_property_int_default(prop, 100);
+	RNA_def_property_ui_text(prop, "Steps Per frame",
+	                         "Number of simulation steps taken per frame (higher values are more accurate "
 	                         "but slower)");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
 	
 	/* constraint solver iterations */
 	prop = RNA_def_property(srna, "solver_iterations", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "num_solver_iterations");
-	RNA_def_property_range(prop, 1, 1000);
-	RNA_def_property_ui_range(prop, 10, 100, 1, -1);
-	RNA_def_property_int_default(prop, 10);
+	RNA_def_property_range(prop, 1, INT_MAX);
+	RNA_def_property_ui_range(prop, 1, 100, 1, -1);
+	RNA_def_property_int_default(prop, 20);
 	RNA_def_property_int_funcs(prop, NULL, "rna_RigidBodyWorld_num_solver_iterations_set", NULL);
 	RNA_def_property_ui_text(prop, "Solver Iterations",
-	                         "Number of constraint solver iterations made per simulation step (higher values are more "
+	                         "Max number of constraint solver iterations made per simulation step (higher values are more "
 	                         "accurate but slower)");
+	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
+
+	/* parametes of solver iterations */
+	prop = RNA_def_property(srna, "erp", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "erp");
+	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 1, 3);
+	RNA_def_property_float_default(prop, 0.2f);
+	RNA_def_property_ui_text(prop, "ERP",
+		" error reduction parameter:The ERP specifies what proportion of the joint error will be fixed during the next simulation step. If ERP=0 then no correcting force is applied and the bodies will eventually drift apart as the simulation proceeds. If ERP=1 then the simulation will attempt to fix all joint error during the next time step. However, setting ERP=1 is not recommended, as the joint error will not be completely fixed due to various internal approximations. A value of ERP=0.1 to 0.8 is recommended (0.2 is the default).");
+	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
+
+
+	prop = RNA_def_property(srna, "cfm", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "cfm");
+	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 1, 3);
+	RNA_def_property_float_default(prop, 0.0f);
+	RNA_def_property_ui_text(prop, "CFM",
+		"constraint force mixing :sing a positive value of CFM has the additional benefit of taking the system away from any singularity and thus improving the factorizer accuracy.A value of ERP=1e-10( double precision ) and 1e-5 ( single precision ) are recommended (0.0 is the default)");
+	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
+
+	prop = RNA_def_property(srna, "lsr", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "lsr");
+	RNA_def_property_ui_range(prop, 0.0f, 1.0f, 1, 3);
+	RNA_def_property_float_default(prop, 0.0f);
+	RNA_def_property_ui_text(prop, "LSR",
+		"leastSquaresResidual:A value of 1e-10( double precision ) and 1e-5 ( single precision ) are recommended (0.0 is the default)");
 	RNA_def_property_update(prop, NC_SCENE, "rna_RigidBodyWorld_reset");
 	
 	/* split impulse */
@@ -901,6 +970,78 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Mass", "How much the object 'weighs' irrespective of gravity");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 	
+
+	prop = RNA_def_property(srna, "pos", PROP_FLOAT, PROP_TRANSLATION);
+	RNA_def_property_float_sdna(prop, NULL, "pos");
+	RNA_def_property_ui_text(prop, "Position", "Position");
+
+	prop = RNA_def_property(srna, "orn", PROP_FLOAT, PROP_QUATERNION);
+	RNA_def_property_float_sdna(prop, NULL, "orn");
+	RNA_def_property_ui_text(prop, "Orientation", "Orientation");
+
+	prop = RNA_def_property(srna, "lin_vel", PROP_FLOAT, PROP_VELOCITY);
+	RNA_def_property_float_sdna(prop, NULL, "lin_vel");
+	RNA_def_property_ui_text(prop, "Velocity", "linear velocity");
+
+	prop = RNA_def_property(srna, "an_vel", PROP_FLOAT, PROP_ANVELOCITY);
+	RNA_def_property_float_sdna(prop, NULL, "an_vel");
+	RNA_def_property_ui_text(prop, "Angular Velocity", "Angular  velocity");
+
+	
+
+	prop = RNA_def_property(srna, "totalforce", PROP_FLOAT, PROP_FORCE);
+	RNA_def_property_float_sdna(prop, NULL, "totalforce");
+	RNA_def_property_ui_text(prop, "totalforce", "Total force");
+
+	prop = RNA_def_property(srna, "totaltorque", PROP_FLOAT, PROP_TORQUE);
+	RNA_def_property_float_sdna(prop, NULL, "totaltorque");
+	RNA_def_property_ui_text(prop, "Totaltorque", "Total torque");
+
+	prop = RNA_def_property(srna, "num_contacts", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "num_contacts");
+	RNA_def_property_ui_text(prop, "Contacts contacts_info", "Contacts contacts_info");
+
+	prop = RNA_def_property(srna, "rigidbody_id", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "rigidbody_id");
+	RNA_def_property_ui_text(prop, "Contacts contacts_info", "Contacts contacts_info");
+
+	prop = RNA_def_property(srna, "forcechain_id", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "forcechain_id");
+	RNA_def_property_ui_text(prop, "Contacts contacts_info", "Contacts contacts_info");
+
+	prop = RNA_def_property(srna, "forcechain_force", PROP_FLOAT, PROP_FORCE);
+	RNA_def_property_float_sdna(prop, NULL, "forcechain_force");
+	RNA_def_property_ui_text(prop, "Contacts contacts_info", "Contacts contacts_info");
+
+	prop = RNA_def_property(srna, "forcechain_normal1", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "forcechain_normal1");
+	RNA_def_property_ui_text(prop, "Contacts forcechain_normal1", "Contacts forcechain_normal1");
+
+	prop = RNA_def_property(srna, "forcechain_normal2", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "forcechain_normal2");
+	RNA_def_property_ui_text(prop, "Contacts forcechain_normal2", "Contacts forcechain_normal2");
+
+	prop = RNA_def_property(srna, "forcechain_normal3", PROP_FLOAT, PROP_NONE);
+	RNA_def_property_float_sdna(prop, NULL, "forcechain_normal3");
+	RNA_def_property_ui_text(prop, "Contacts forcechain_normal3", "Contacts forcechain_normal3");
+
+	prop = RNA_def_property(srna, "chris_stress_x", PROP_FLOAT, PROP_TORQUE);
+	RNA_def_property_float_sdna(prop, NULL, "chris_stress_x");
+	RNA_def_property_ui_text(prop, "Chris_Stress_X", "Christoffersen stress sigma_xi(i=x,y,z)");
+
+	prop = RNA_def_property(srna, "chris_stress_y", PROP_FLOAT, PROP_TORQUE);
+	RNA_def_property_float_sdna(prop, NULL, "chris_stress_y");
+	RNA_def_property_ui_text(prop, "Chris_Stress_Y", "Christoffersen stress sigma_yi(i=x,y,z)");
+
+	prop = RNA_def_property(srna, "chris_stress_z", PROP_FLOAT, PROP_TORQUE);
+	RNA_def_property_float_sdna(prop, NULL, "chris_stress_z");
+	RNA_def_property_ui_text(prop, "Chris_Stress_Z", "Christoffersen stress sigma_zi(i=x,y,z)");
+
+
+
+
+
+
 	/* Dynamics Parameters - Activation */
 	// TODO: define and figure out how to implement these
 	
@@ -942,7 +1083,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	prop = RNA_def_property(srna, "linear_damping", PROP_FLOAT, PROP_FACTOR);
 	RNA_def_property_float_sdna(prop, NULL, "lin_damping");
 	RNA_def_property_range(prop, 0.0f, 1.0f);
-	RNA_def_property_float_default(prop, 0.04f);
+	RNA_def_property_float_default(prop, 0.05f);
 	RNA_def_property_float_funcs(prop, NULL, "rna_RigidBodyOb_linear_damping_set", NULL);
 	RNA_def_property_ui_text(prop, "Linear Damping", "Amount of linear velocity that is lost over time");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
@@ -1002,6 +1143,7 @@ static void rna_def_rigidbody_object(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Collision Groups", "Collision Groups Rigid Body belongs to");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 	RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
+
 }
 
 static void rna_def_rigidbody_constraint(BlenderRNA *brna)
@@ -1058,7 +1200,7 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	                         "Constraint can be broken if it receives an impulse above the threshold");
 	RNA_def_property_update(prop, NC_OBJECT | ND_POINTCACHE, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "breaking_threshold", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "breaking_threshold", PROP_FLOAT, PROP_IMPULSE);
 	RNA_def_property_float_sdna(prop, NULL, "breaking_threshold");
 	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, 1000.0f, 100.0, 2);
@@ -1078,7 +1220,7 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 
 	prop = RNA_def_property(srna, "solver_iterations", PROP_INT, PROP_NONE);
 	RNA_def_property_int_sdna(prop, NULL, "num_solver_iterations");
-	RNA_def_property_range(prop, 1, 1000);
+	RNA_def_property_range(prop, 1, SHRT_MAX);
 	RNA_def_property_ui_range(prop, 1, 100, 1, -1);
 	RNA_def_property_int_default(prop, 10);
 	RNA_def_property_int_funcs(prop, NULL, "rna_RigidBodyCon_num_solver_iterations_set", NULL);
@@ -1349,7 +1491,7 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Target Velocity", "Target linear motor velocity");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "motor_lin_max_impulse", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "motor_lin_max_impulse", PROP_FLOAT, PROP_UNIT_IMPULSE);
 	RNA_def_property_float_sdna(prop, NULL, "motor_lin_max_impulse");
 	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, 100.0f, 1, 3);
@@ -1358,7 +1500,7 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Max Impulse", "Maximum linear motor impulse");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "motor_ang_target_velocity", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "motor_ang_target_velocity", PROP_FLOAT, PROP_ANVELOCITY);
 	RNA_def_property_float_sdna(prop, NULL, "motor_ang_target_velocity");
 	RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
 	RNA_def_property_ui_range(prop, -100.0f, 100.0f, 1, 3);
@@ -1367,7 +1509,7 @@ static void rna_def_rigidbody_constraint(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Target Velocity", "Target angular motor velocity");
 	RNA_def_property_update(prop, NC_OBJECT, "rna_RigidBodyOb_reset");
 
-	prop = RNA_def_property(srna, "motor_ang_max_impulse", PROP_FLOAT, PROP_NONE);
+	prop = RNA_def_property(srna, "motor_ang_max_impulse", PROP_FLOAT, PROP_IMPULSE_MOMENT);
 	RNA_def_property_float_sdna(prop, NULL, "motor_ang_max_impulse");
 	RNA_def_property_range(prop, 0.0f, FLT_MAX);
 	RNA_def_property_ui_range(prop, 0.0f, 100.0f, 1, 3);

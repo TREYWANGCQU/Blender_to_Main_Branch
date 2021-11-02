@@ -52,9 +52,9 @@ btSimpleDynamicsWorld::~btSimpleDynamicsWorld()
 		btAlignedFree( m_constraintSolver);
 }
 
-int		btSimpleDynamicsWorld::stepSimulation( btScalar timeStep,int maxSubSteps, btScalar fixedTimeStep)
+int		btSimpleDynamicsWorld::stepSimulation(btScalar timeStep, int maxSubSteps, int SubSteps)
 {
-	(void)fixedTimeStep;
+	/*(void)fixedTimeStep;*/
 	(void)maxSubSteps;
 
 

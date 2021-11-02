@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ***** BEGIN GPL LICENSE BLOCK *****
  *
  * This program is free software; you can redistribute it and/or
@@ -55,20 +55,33 @@ typedef struct RigidBodyWorld {
 	
 	struct Group *constraints;	/* Group containing objects to use for Rigid Body Constraints*/
 
-	int pad;
-	float ltime;				/* last frame world was evaluated for (internal) */
+	//int pad;
+	
 	
 	/* cache */
 	struct PointCache *pointcache;
 	struct ListBase ptcaches;
 	int numbodies;              /* number of objects in rigid body group */
+	float ltime;				/* last frame world was evaluated for (internal) */
 	
-	short steps_per_second;		/* number of simulation steps thaken per second */
-	short num_solver_iterations;/* number of constraint solver iterations made per simulation step */
+	int steps_per_frame;		/* number of simulation steps thaken per frame */
+	int num_solver_iterations;/* number of constraint solver iterations made per simulation step */
+
+	float erp;/* the error reduction parameter:The ERP specifies what proportion of the joint error will be fixed during the next simulation step. */
+	float cfm;/*Constraint Force Mixing: Using a positive value of CFM has the additional benefit of taking the system away from any singularity and thus improving the factorizer accuracy. */
+	float lsr;/*leastSquaresResidual*/
+	//float pad;/*for align-data*/
+
+	float upper_periodic_x;
+	float lower_periodic_x;
+	float upper_periodic_y;
+	float lower_periodic_y;
+	float upper_periodic_z;
+	float lower_periodic_z;
 	
 	int flag;					/* (eRigidBodyWorld_Flag) settings for this RigidBodyWorld */
 	float time_scale;			/* used to speed up or slow down the simulation */
-	
+	float length_scale;      
 	/* References to Physics Sim objects. Exist at runtime only ---------------------- */
 	void *physics_world;		/* Physics sim world (i.e. btDiscreteDynamicsWorld) */
 } RigidBodyWorld;
@@ -80,7 +93,12 @@ typedef enum eRigidBodyWorld_Flag {
 	/* sim data needs to be rebuilt */
 	RBW_FLAG_NEEDS_REBUILD		= (1 << 1),
 	/* usse split impulse when stepping the simulation */
-	RBW_FLAG_USE_SPLIT_IMPULSE	= (1 << 2)
+	RBW_FLAG_USE_SPLIT_IMPULSE	= (1 << 2),
+
+	RBW_FLAG_USE_PERIODIC_X = (1 << 3),
+	RBW_FLAG_USE_PERIODIC_Y = (1 << 4),
+	RBW_FLAG_USE_PERIODIC_Z = (1 << 5),
+
 } eRigidBodyWorld_Flag;
 
 /* ******************************** */
@@ -100,18 +118,19 @@ typedef struct RigidBodyOb {
 	/* General Settings for this RigidBodyOb */
 	short type;				/* (eRigidBodyOb_Type) role of RigidBody in sim  */
 	short shape;			/* (eRigidBody_Shape) collision shape to use */ 
-	
 	int flag;				/* (eRigidBodyOb_Flag) */
+
+	
+	
 	int col_groups;			/* Collision groups that determines wich rigid bodies can collide with each other */
 	short mesh_source;		/* (eRigidBody_MeshSource) mesh source for mesh based collision shapes */
-	short pad;
+	short pad;              /* padding */
 	
 	/* Physics Parameters */
 	float mass;				/* how much object 'weighs' (i.e. absolute 'amount of stuff' it holds) */
-	
 	float friction;			/* resistance of object to movement */
+
 	float restitution;		/* how 'bouncy' object is when it collides */
-	
 	float margin;			/* tolerance for detecting collisions */ 
 	
 	float lin_damping;		/* damping for linear velocities */
@@ -121,8 +140,33 @@ typedef struct RigidBodyOb {
 	float ang_sleep_thresh;	/* deactivation threshold for angular velocities */
 	
 	float orn[4];			/* rigid body orientation */
+	
 	float pos[3];			/* rigid body position */
 	float pad1;
+
+	float totalforce[3];
+	float totaltorque[3];
+
+	float lin_vel[3];
+	float an_vel[3];
+
+	float num_contacts;
+	float rigidbody_id;
+
+	float chris_stress_x[3];
+	float chris_stress_y[3];
+
+	float chris_stress_z[3];
+	float forcechain_id[3];
+
+	float forcechain_force[3];
+	float forcechain_normal1[3];
+
+	float forcechain_normal2[3];
+	float forcechain_normal3[3];/* 名字不能有大写，变量大小为偶，8字节对齐，char占1字节，short占 2 字节，int 、float、long(64位win是8字节) 都占 4 字节，double 占8 字节，任意类型的指针都占4个字节 */
+
+	
+	
 } RigidBodyOb;
 
 
@@ -151,7 +195,8 @@ typedef enum eRigidBodyOb_Flag {
 	/* collision margin is not embedded (only used by convex hull shapes for now) */
 	RBO_FLAG_USE_MARGIN			= (1 << 6),
 	/* collision shape deforms during simulation (only for passive triangle mesh shapes) */
-	RBO_FLAG_USE_DEFORM			= (1 << 7)
+	RBO_FLAG_USE_DEFORM			= (1 << 7),
+	
 } eRigidBodyOb_Flag;
 
 /* RigidBody Collision Shape */
